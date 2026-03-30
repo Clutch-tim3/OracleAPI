@@ -1,0 +1,586 @@
+openapi: 3.0.0
+info:
+  title: OracleIQ — World Prediction Markets Intelligence API
+  description: Real-time prediction market intelligence API. Live event probabilities from Kalshi, Polymarket & more. AI market analysis, trending events, consensus views, portfolio simulation, and embeddable widgets.
+  version: 2.0.0
+servers:
+  - url: https://api.oracleiq.dev/v1
+    description: Production server
+  - url: http://localhost:3000/v1
+    description: Local development server
+paths:
+  /markets:
+    get:
+      summary: Get all prediction markets
+      description: Browse and search prediction markets across all platforms
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Full-text search in title + description
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [politics, economics, finance, sports, technology, climate, culture, crypto, science, geopolitics, entertainment]
+          description: Filter by category
+        - in: query
+          name: platform
+          schema:
+            type: string
+            enum: [kalshi, polymarket, metaculus, manifold, all]
+            default: all
+          description: Filter by platform
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, closed, resolved, all]
+            default: open
+          description: Filter by status
+        - in: query
+          name: closes_within
+          schema:
+            type: string
+            enum: [24h, 7d, 30d, 90d]
+          description: Filter for markets closing soon
+        - in: query
+          name: min_volume
+          schema:
+            type: number
+          description: Minimum total volume (USD)
+        - in: query
+          name: probability_min
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+          description: Minimum probability (0-100)
+        - in: query
+          name: probability_max
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+          description: Maximum probability (0-100)
+        - in: query
+          name: moving
+          schema:
+            type: boolean
+          description: Only markets with significant movement
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [trending, volume, closing_soon, recently_updated, significance, probability_asc, probability_desc]
+            default: trending
+          description: Sorting option
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          description: Number of results to return
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          description: Offset for pagination
+      responses:
+        '200':
+          description: Successful response
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: Unique request identifier
+            X-Response-Time:
+              schema:
+                type: string
+              description: Response time in milliseconds
+            X-RateLimit-Tier:
+              schema:
+                type: string
+              description: Current API tier
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Monthly quota limit
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in current period
+            X-RateLimit-Reset:
+              schema:
+                type: string
+              description: Quota reset date
+            X-OracleIQ-Version:
+              schema:
+                type: string
+              description: API version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/{id}:
+    get:
+      summary: Get market details
+      description: Get complete details about a single prediction market
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Market ID
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/{id}/analyse:
+    post:
+      summary: Analyze a market
+      description: Get AI analysis of a prediction market
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Market ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/trending:
+    get:
+      summary: Get trending markets
+      description: Markets with significant probability movement
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+          description: Filter by category
+        - in: query
+          name: platform
+          schema:
+            type: string
+          description: Filter by platform
+        - in: query
+          name: timeframe
+          schema:
+            type: string
+            enum: [1h, 6h, 24h]
+            default: 24h
+          description: Timeframe for trending calculation
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          description: Number of results to return
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/consensus:
+    get:
+      summary: Get consensus view
+      description: Get collective market intelligence on a specific topic
+      parameters:
+        - in: query
+          name: topic
+          required: true
+          schema:
+            type: string
+          description: Topic to search for
+        - in: query
+          name: max_markets
+          schema:
+            type: integer
+            default: 10
+          description: Maximum number of markets to include
+        - in: query
+          name: include_narrative
+          schema:
+            type: boolean
+            default: true
+          description: Include AI narrative summary
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/search/semantic:
+    get:
+      summary: Semantic search
+      description: Natural language search for prediction markets
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+          description: Natural language query
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Number of results to return
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/resolved:
+    get:
+      summary: Get resolved markets
+      description: Get recently resolved markets and their accuracy
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+          description: Filter by category
+        - in: query
+          name: platform
+          schema:
+            type: string
+          description: Filter by platform
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          description: Number of results to return
+        - in: query
+          name: days_back
+          schema:
+            type: integer
+            default: 30
+          description: How far back to look (days)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /markets/compare:
+    get:
+      summary: Compare two markets
+      description: Compare two prediction markets
+      parameters:
+        - in: query
+          name: market_id_1
+          required: true
+          schema:
+            type: string
+          description: First market ID
+        - in: query
+          name: market_id_2
+          required: true
+          schema:
+            type: string
+          description: Second market ID
+        - in: query
+          name: include_analysis
+          schema:
+            type: boolean
+            default: true
+          description: Include AI analysis of the comparison
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /portfolio/simulate:
+    post:
+      summary: Simulate portfolio
+      description: Simulate a prediction market portfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioSimulationRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /alerts/register:
+    post:
+      summary: Register alert
+      description: Register a webhook for market probability movements (PRO+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /health:
+    get:
+      summary: Health check
+      description: Check API and system status
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /embed/{marketId}:
+    get:
+      summary: Get embeddable widget
+      description: Get HTML widget for embedding in websites
+      parameters:
+        - in: path
+          name: marketId
+          required: true
+          schema:
+            type: string
+          description: Market ID
+      responses:
+        '200':
+          description: Successful response
+          content:
+            text/html:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-RapidAPI-Key
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          $ref: '#/components/schemas/ApiError'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "MARKET_NOT_FOUND"
+        message:
+          type: string
+          example: "Market not found"
+        detail:
+          type: string
+          example: "The market ID provided does not exist or has been archived."
+        docs_url:
+          type: string
+          example: "https://oracleiq.dev/docs/errors#MARKET_NOT_FOUND"
+        request_id:
+          type: string
+          example: "req_abc123xyz"
+        timestamp:
+          type: string
+          example: "2026-04-01T14:22:07Z"
+        quota:
+          type: object
+          properties:
+            used:
+              type: integer
+            limit:
+              type: integer
+            resets_at:
+              type: string
+        required_tier:
+          type: string
+        current_tier:
+          type: string
+        upgrade_url:
+          type: string
+        valid_categories:
+          type: array
+          items:
+            type: string
+        field:
+          type: string
+        location:
+          type: string
+        retry_after_seconds:
+          type: integer
+    ResponseMeta:
+      type: object
+      properties:
+        request_id:
+          type: string
+        version:
+          type: string
+        processing_ms:
+          type: integer
+        from_cache:
+          type: boolean
+        data_freshness:
+          type: string
+        code_examples:
+          type: object
+          properties:
+            node:
+              type: string
+            python:
+              type: string
+            curl:
+              type: string
+    AnalysisRequest:
+      type: object
+      properties:
+        analysis_depth:
+          type: string
+          enum: [quick, standard, deep]
+          default: standard
+        perspective:
+          type: string
+          enum: [neutral, bull, bear]
+          default: neutral
+        audience:
+          type: string
+          enum: [general, trader, journalist, researcher]
+          default: general
+        include_historical_context:
+          type: boolean
+          default: true
+        include_price_drivers:
+          type: boolean
+          default: true
+        include_scenarios:
+          type: boolean
+          default: true
+    PortfolioSimulationRequest:
+      type: object
+      properties:
+        positions:
+          type: array
+          items:
+            type: object
+            properties:
+              market_id:
+                type: string
+              side:
+                type: string
+                enum: [yes, no]
+              entry_probability:
+                type: number
+                minimum: 0
+                maximum: 1
+              stake:
+                type: number
+                minimum: 0
+              entry_date:
+                type: string
+        cash_balance:
+          type: number
+          minimum: 0
+        include_pnl:
+          type: boolean
+          default: true
+        include_expected_value:
+          type: boolean
+          default: true
+    AlertRequest:
+      type: object
+      properties:
+        market_ids:
+          type: array
+          items:
+            type: string
+        category:
+          type: string
+        trigger:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [probability_change]
+            threshold:
+              type: number
+        webhook_url:
+          type: string
+security:
+  - apiKey: []

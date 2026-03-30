@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Market {
+  id                  String    @id @default(cuid())
+  source_platform     String
+  source_id           String
+  source_url          String?
+  title               String
+  description         String?   @db.Text
+  category            String
+  sub_category        String?
+  tags                String[]
+  market_type         String
+  outcomes            Json
+  status              String
+  resolution          String?
+  resolution_source   String?
+  opens_at            DateTime?
+  closes_at           DateTime?
+  resolved_at         DateTime?
+  total_volume        Float?
+  volume_24h          Float?
+  liquidity           Float?
+  num_traders         Int?
+  probability_yes     Float?
+  probability_change_24h Float?
+  probability_change_7d  Float?
+  ai_summary          String?   @db.Text
+  significance_score  Float?
+  category_accuracy   Float?
+  snapshots           MarketSnapshot[]
+  analyses            MarketAnalysis[]
+  last_synced         DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+
+  @@unique([source_platform, source_id])
+  @@index([category, status, closes_at])
+  @@index([probability_change_24h])
+  @@index([total_volume])
+}
+
+model MarketSnapshot {
+  id              String    @id @default(cuid())
+  market_id       String
+  market          Market    @relation(fields: [market_id], references: [id])
+  probability_yes Float
+  total_volume    Float?
+  liquidity       Float?
+  num_traders     Int?
+  snapshot_at     DateTime  @default(now())
+  @@index([market_id, snapshot_at])
+}
+
+model MarketAnalysis {
+  id              String    @id @default(cuid())
+  market_id       String
+  market          Market    @relation(fields: [market_id], references: [id])
+  analysis_type   String
+  input_hash      String    @unique
+  result          Json
+  model_used      String
+  createdAt       DateTime  @default(now())
+  @@index([market_id, analysis_type])
+}
+
+model CategoryAccuracy {
+  id              String    @id @default(cuid())
+  category        String
+  platform        String
+  total_resolved  Int       @default(0)
+  correctly_called Int      @default(0)
+  brier_score_avg Float?
+  accuracy_pct    Float?
+  calibration_data Json?
+  last_updated    DateTime  @default(now())
+  @@unique([category, platform])
+}
+
+model TrendingMarket {
+  id                  String    @id @default(cuid())
+  market_id           String    @unique
+  trending_score      Float
+  reason              String[]
+  prob_change_1h      Float?
+  prob_change_24h     Float?
+  volume_change_24h   Float?
+  last_updated        DateTime  @default(now())
+}
+
+model SyncLog {
+  id              String    @id @default(cuid())
+  source          String
+  sync_type       String
+  markets_synced  Int       @default(0)
+  markets_updated Int       @default(0)
+  errors          Int       @default(0)
+  duration_ms     Int?
+  status          String
+  createdAt       DateTime  @default(now())
+}
+
+model ApiUsage {
+  id              String    @id @default(cuid())
+  api_key_hash    String
+  tier            String
+  endpoint        String
+  request_weight  Int       @default(1)
+  response_status Int
+  duration_ms     Int
+  from_cache      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  @@index([api_key_hash, createdAt])
+}

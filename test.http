@@ -1,0 +1,55 @@
+### Get all markets (demo API key)
+GET http://localhost:3000/v1/markets
+X-RapidAPI-Key: demo-api-key-12345
+
+### Get trending markets
+GET http://localhost:3000/v1/markets/trending
+X-RapidAPI-Key: demo-api-key-12345
+
+### Get consensus view on Fed rates
+GET http://localhost:3000/v1/markets/consensus?topic=Federal%20Reserve
+X-RapidAPI-Key: demo-api-key-12345
+
+### Search markets
+GET http://localhost:3000/v1/markets/search/semantic?q=recession
+X-RapidAPI-Key: demo-api-key-12345
+
+### Analyze a market
+POST http://localhost:3000/v1/markets/clx9k2/analyse
+X-RapidAPI-Key: demo-api-key-12345
+Content-Type: application/json
+
+{
+  "analysis_depth": "standard",
+  "perspective": "neutral",
+  "audience": "general",
+  "include_historical_context": true,
+  "include_price_drivers": true,
+  "include_scenarios": true
+}
+
+### Simulate portfolio
+POST http://localhost:3000/v1/portfolio/simulate
+X-RapidAPI-Key: demo-api-key-12345
+Content-Type: application/json
+
+{
+  "positions": [
+    {
+      "market_id": "clx9k2",
+      "side": "yes",
+      "entry_probability": 0.58,
+      "stake": 100,
+      "entry_date": "2026-02-01"
+    }
+  ],
+  "cash_balance": 500,
+  "include_pnl": true,
+  "include_expected_value": true
+}
+
+### Health check
+GET http://localhost:3000/v1/health
+
+### Get widget
+GET http://localhost:3000/embed/clx9k2
