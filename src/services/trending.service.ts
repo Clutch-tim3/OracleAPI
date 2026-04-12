@@ -1,168 +1,110 @@
-import prisma from '../config/database';
+import db from '../config/database';
 import { formatProbabilityChange, formatCurrency } from '../utils/formatting';
+
+const marketsRef  = db.collection('markets');
+const trendingRef = db.collection('trendingMarkets');
 
 export class TrendingService {
   async getTrendingMarkets(params: any): Promise<any> {
-    const {
-      category,
-      platform,
-      timeframe = '24h',
-      limit = 20
-    } = params;
+    const { category, platform, timeframe = '24h', limit = 20 } = params;
 
-    let where: any = {};
-    
-    if (category) {
-      where.market = {
-        category: category
-      };
-    }
+    let query: any = trendingRef.orderBy('trending_score', 'desc').limit(limit * 3);
+    const snap = await query.get();
 
-    if (platform && platform !== 'all') {
-      where.market = {
-        ...where.market,
-        source_platform: platform
-      };
-    }
+    // Fetch corresponding markets
+    const trendingDocs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const marketIds = trendingDocs.map((t: any) => t.market_id);
+    const marketDocs = await Promise.all(marketIds.map((id: string) => marketsRef.doc(id).get()));
+    const marketMap = new Map<string, any>();
+    marketDocs.forEach((d: any) => { if (d.exists) marketMap.set(d.id, { id: d.id, ...d.data() }); });
 
-    const trendingMarkets = await prisma.trendingMarket.findMany({
-      where,
-      orderBy: { trending_score: 'desc' },
-      take: limit,
-      include: {
-        market: true
-      }
-    });
+    let results = trendingDocs
+      .map((tm: any) => ({ tm, market: marketMap.get(tm.market_id) }))
+      .filter(({ market }: any) => {
+        if (!market) return false;
+        if (category && market.category !== category) return false;
+        if (platform && platform !== 'all' && market.source_platform !== platform) return false;
+        return true;
+      })
+      .slice(0, limit);
 
     return {
       as_of: new Date().toISOString(),
       timeframe,
-      markets: trendingMarkets.map((tm, index) => ({
+      markets: results.map(({ tm, market }: any, index: number) => ({
         trending_rank: index + 1,
-        id: tm.market.id,
-        title: tm.market.title,
-        category: tm.market.category,
-        platform: tm.market.source_platform,
-        probability_yes: tm.market.probability_yes,
+        id: market.id,
+        title: market.title,
+        category: market.category,
+        platform: market.source_platform,
+        probability_yes: market.probability_yes,
         probability_change_24h: tm.prob_change_24h,
         change_formatted: formatProbabilityChange(tm.prob_change_24h || 0),
-        volume_24h: tm.market.volume_24h,
-        volume_24h_formatted: formatCurrency(tm.market.volume_24h || 0),
+        volume_24h: market.volume_24h,
+        volume_24h_formatted: formatCurrency(market.volume_24h || 0),
         trending_reasons: tm.reason,
-        significance_score: tm.market.significance_score
+        significance_score: market.significance_score
       }))
     };
   }
 
   async updateTrendingMarkets(): Promise<void> {
-    // Calculate trending scores based on:
-    // - Probability change (40%)
-    // - Volume change (30%)
-    // - New trader activity (20%)
-    // - Recency (10%)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-    const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const snap = await marketsRef.where('status', '==', 'open').get();
+    const batch = db.batch();
+    const updates: any[] = [];
 
-    // Get markets with recent probability changes
-    const markets = await prisma.market.findMany({
-      where: {
-        status: 'open',
-        last_synced: { gte: oneDayAgo }
-      },
-      include: {
-        snapshots: true
-      }
-    });
+    for (const doc of snap.docs) {
+      const market: any = { id: doc.id, ...doc.data() };
+      const snapsSnap = await doc.ref.collection('snapshots')
+        .where('snapshot_at', '>=', oneDayAgo)
+        .orderBy('snapshot_at', 'asc').get();
 
-    const trendingUpdates = [];
+      const snaps = snapsSnap.docs.map((s: any) => s.data());
+      if (snaps.length < 2) continue;
 
-    for (const market of markets) {
-      const recentSnapshots = market.snapshots.filter(s => 
-        s.snapshot_at >= oneDayAgo
-      ).sort((a, b) => a.snapshot_at.getTime() - b.snapshot_at.getTime());
+      const probChange24h = snaps[snaps.length - 1].probability_yes - snaps[0].probability_yes;
+      const hourSnaps = snaps.filter((s: any) => {
+        const t = s.snapshot_at?.toDate?.() ?? new Date(s.snapshot_at);
+        return t >= oneHourAgo;
+      });
+      const probChange1h = hourSnaps.length > 1
+        ? hourSnaps[hourSnaps.length - 1].probability_yes - hourSnaps[0].probability_yes
+        : 0;
 
-      if (recentSnapshots.length < 2) continue;
+      const trendingScore =
+        Math.abs(probChange1h) * 40 +
+        Math.min((market.volume_24h || 0) / 10000, 1) * 30 +
+        10;
 
-      const probChange24h = recentSnapshots[recentSnapshots.length - 1].probability_yes - 
-                          recentSnapshots[0].probability_yes;
-      
-      let probChange1h = 0;
-      const oneHourSnapshots = recentSnapshots.filter(s => s.snapshot_at >= oneHourAgo);
-      if (oneHourSnapshots.length > 1) {
-        probChange1h = oneHourSnapshots[oneHourSnapshots.length - 1].probability_yes - 
-                     oneHourSnapshots[0].probability_yes;
-      }
-
-      // Calculate volume change (proxy)
-      const volumeChange24h = market.volume_24h || 0;
-
-      // Calculate trending score
-      const trendingScore = 
-        (Math.abs(probChange1h) * 40) + 
-        (Math.min(volumeChange24h / 10000, 1) * 30) + 
-        (0.5 * 20) +  // New trader activity proxy
-        (1 * 10);     // Recency bonus
-
-      const reasons = this.determineTrendingReasons(probChange1h, probChange24h, volumeChange24h);
-
-      trendingUpdates.push({
+      updates.push({
         market_id: market.id,
         trending_score: trendingScore,
-        reason: reasons,
+        reason: this.determineTrendingReasons(probChange1h, probChange24h, market.volume_24h || 0),
         prob_change_1h: probChange1h,
         prob_change_24h: probChange24h,
-        volume_change_24h: volumeChange24h,
+        volume_change_24h: market.volume_24h || 0,
         last_updated: new Date()
       });
     }
 
-    // Update trending markets
-    for (const update of trendingUpdates) {
-      await prisma.trendingMarket.upsert({
-        where: { market_id: update.market_id },
-        update: update,
-        create: update
-      });
+    updates.sort((a, b) => b.trending_score - a.trending_score);
+    const top100 = updates.slice(0, 100);
+    for (const u of top100) {
+      batch.set(trendingRef.doc(u.market_id), u, { merge: true });
     }
-
-    // Keep only top 100 trending markets
-    const topTrending = await prisma.trendingMarket.findMany({
-      orderBy: { trending_score: 'desc' },
-      take: 100
-    });
-
-    const topIds = topTrending.map(t => t.market_id);
-    await prisma.trendingMarket.deleteMany({
-      where: { market_id: { notIn: topIds } }
-    });
+    await batch.commit();
   }
 
-  private determineTrendingReasons(
-    probChange1h: number, 
-    probChange24h: number, 
-    volumeChange24h: number
-  ): string[] {
-    const reasons: string[] = [];
-
-    if (Math.abs(probChange1h) > 0.05) {
-      reasons.push('Largest 1-hour move');
-    }
-
-    if (Math.abs(probChange24h) > 0.10) {
-      reasons.push('Significant 24-hour move');
-    }
-
-    if (volumeChange24h > 500000) {
-      reasons.push('High trading volume');
-    }
-
-    if (reasons.length === 0) {
-      reasons.push('Recent market activity');
-    }
-
-    return reasons;
+  private determineTrendingReasons(p1h: number, p24h: number, vol: number): string[] {
+    const r: string[] = [];
+    if (Math.abs(p1h) > 0.05)  r.push('Largest 1-hour move');
+    if (Math.abs(p24h) > 0.10) r.push('Significant 24-hour move');
+    if (vol > 500000)           r.push('High trading volume');
+    if (!r.length)              r.push('Recent market activity');
+    return r;
   }
 }
 

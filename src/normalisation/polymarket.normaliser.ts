@@ -1,5 +1,5 @@
 import { PolymarketMarket } from '../types/platform.types';
-import { MarketData, Category } from '../types/market.types';
+import { MarketData, Category, MarketStatus } from '../types/market.types';
 
 export function normalizePolymarketMarket(polymarketMarket: PolymarketMarket): MarketData {
   let probabilityYes: number | undefined; // Changed from number to number | undefined
@@ -51,7 +51,7 @@ export function normalizePolymarketMarket(polymarketMarket: PolymarketMarket): M
   };
 }
 
-function mapStatus(status: string): string {
+function mapStatus(status: string): MarketStatus {
   const statusMap: Record<string, string> = {
     'active': 'open',
     'closed': 'closed',
@@ -59,7 +59,7 @@ function mapStatus(status: string): string {
     'voided': 'voided'
   };
   
-  return statusMap[status.toLowerCase()] || 'open';
+  return (statusMap[status.toLowerCase()] || 'open') as MarketStatus;
 }
 
 function determineCategory(question: string): Category {

@@ -1,5 +1,5 @@
 import { ManifoldMarket } from '../types/platform.types';
-import { MarketData, Category } from '../types/market.types';
+import { MarketData, Category, MarketStatus } from '../types/market.types';
 
 export function normalizeManifoldMarket(manifoldMarket: ManifoldMarket): MarketData {
   const probabilityYes = manifoldMarket.probability;
@@ -51,15 +51,15 @@ export function normalizeManifoldMarket(manifoldMarket: ManifoldMarket): MarketD
   };
 }
 
-function mapStatus(status: string): string {
+function mapStatus(status: string): MarketStatus {
   const statusMap: Record<string, string> = {
     'open': 'open',
     'closed': 'closed',
     'resolved': 'resolved',
     'voided': 'voided'
   };
-  
-  return statusMap[status.toLowerCase()] || 'open';
+
+  return (statusMap[status.toLowerCase()] || 'open') as MarketStatus;
 }
 
 function determineCategory(question: string, tags: string[]): Category {

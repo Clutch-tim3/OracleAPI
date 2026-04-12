@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import prisma from '../config/database';
+import db from '../config/database';
 import { cache } from '../lib/cache';
 
 export class HealthController {
@@ -15,8 +15,8 @@ export class HealthController {
   }
 
   async getStatus(req: Request, res: Response) {
-    // Check if we have at least 500 markets synced
-    const marketCount = await prisma.market.count();
+    const countSnap = await db.collection('markets').count().get();
+    const marketCount = countSnap.data().count;
     const isInitialized = marketCount > 500;
 
     res.json({

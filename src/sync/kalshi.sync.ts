@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { normalizeKalshiMarket } from '../normalisation/kalshi.normaliser';
 import marketsService from '../services/markets.service';
-import prisma from '../config/database';
+import db from '../config/database';
 
 const KALSHI_API_BASE = process.env.KALSHI_API_BASE || 'https://api.elections.kalshi.com/trade-api/v2';
 
@@ -27,12 +27,9 @@ export class KalshiSync {
       for (const kalshiMarket of kalshiMarkets) {
         try {
           const normalizedMarket = normalizeKalshiMarket(kalshiMarket);
-          const existingMarket = await prisma.market.findFirst({
-            where: {
-              source_platform: 'kalshi',
-              source_id: normalizedMarket.source_id
-            }
-          });
+          const existingDoc = await db.collection('markets')
+            .doc(`kalshi_${normalizedMarket.source_id}`).get();
+          const existingMarket = existingDoc.exists ? existingDoc.data() : null;
 
           const upsertedMarket = await marketsService.upsertMarket(normalizedMarket);
           marketsSynced++;
@@ -60,16 +57,15 @@ export class KalshiSync {
 
     const duration = Date.now() - startTime;
 
-    await prisma.syncLog.create({
-      data: {
-        source: 'kalshi',
-        sync_type: 'incremental',
-        markets_synced: marketsSynced,
-        markets_updated: marketsUpdated,
-        errors: errors,
-        duration_ms: duration,
-        status: errors > 0 ? 'partial' : 'success'
-      }
+    await db.collection('syncLogs').add({
+      source: 'kalshi',
+      sync_type: 'incremental',
+      markets_synced: marketsSynced,
+      markets_updated: marketsUpdated,
+      errors,
+      duration_ms: duration,
+      status: errors > 0 ? 'partial' : 'success',
+      createdAt: new Date()
     });
 
     return {

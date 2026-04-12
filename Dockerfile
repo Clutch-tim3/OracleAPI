@@ -8,8 +8,6 @@ RUN npm ci --only=production
 
 COPY . .
 
-RUN npm run prisma:generate
-
 # Health check
 HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=5 \
   CMD curl -f http://localhost:${PORT:-3000}/health || exit 1

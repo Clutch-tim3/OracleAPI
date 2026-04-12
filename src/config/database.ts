@@ -1,7 +1,17 @@
-import { PrismaClient } from '@prisma/client';
+import * as admin from 'firebase-admin';
 
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn'] : ['error'],
-});
+if (!admin.apps.length) {
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
+    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    : undefined;
 
-export default prisma;
+  admin.initializeApp({
+    credential: serviceAccount
+      ? admin.credential.cert(serviceAccount)
+      : admin.credential.applicationDefault(),
+    projectId: process.env.FIREBASE_PROJECT_ID,
+  });
+}
+
+export const db = admin.firestore();
+export default db;

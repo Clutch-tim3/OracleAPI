@@ -1,13 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import db from '../config/database';
 
-const prisma = new PrismaClient();
+const marketsRef = db.collection('markets');
 
 const demoMarkets = [
   {
     id: 'market_demo_inflation_2026',
     title: 'Will US CPI inflation fall below 3% in 2026?',
     category: 'economics',
-    status: 'active' as const,
+    status: 'active',
     source_platform: 'demo',
     source_id: 'market_demo_inflation_2026',
     source_url: 'https://oracleiq.dev/demo/market_demo_inflation_2026',
@@ -24,7 +24,7 @@ const demoMarkets = [
     id: 'market_demo_fed_rate_2026',
     title: 'Will the Federal Reserve cut rates before July 2026?',
     category: 'economics',
-    status: 'active' as const,
+    status: 'active',
     source_platform: 'demo',
     source_id: 'market_demo_fed_rate_2026',
     source_url: 'https://oracleiq.dev/demo/market_demo_fed_rate_2026',
@@ -41,7 +41,7 @@ const demoMarkets = [
     id: 'market_demo_btc_100k',
     title: 'Will Bitcoin exceed $100,000 before end of 2026?',
     category: 'crypto',
-    status: 'active' as const,
+    status: 'active',
     source_platform: 'demo',
     source_id: 'market_demo_btc_100k',
     source_url: 'https://oracleiq.dev/demo/market_demo_btc_100k',
@@ -58,7 +58,7 @@ const demoMarkets = [
     id: 'market_demo_ai_regulation',
     title: 'Will the US pass federal AI regulation legislation in 2026?',
     category: 'tech-policy',
-    status: 'active' as const,
+    status: 'active',
     source_platform: 'demo',
     source_id: 'market_demo_ai_regulation',
     source_url: 'https://oracleiq.dev/demo/market_demo_ai_regulation',
@@ -75,7 +75,7 @@ const demoMarkets = [
     id: 'market_demo_resolved_example',
     title: 'Did the Federal Reserve raise rates in March 2026?',
     category: 'economics',
-    status: 'resolved' as const,
+    status: 'resolved',
     source_platform: 'demo',
     source_id: 'market_demo_resolved_example',
     source_url: 'https://oracleiq.dev/demo/market_demo_resolved_example',
@@ -94,39 +94,26 @@ const demoMarkets = [
 
 export async function seedDemoMarkets() {
   const shouldSeed = process.env.DEMO_SEED_ON_STARTUP === 'true' || process.env.NODE_ENV === 'development';
-
   if (!shouldSeed) {
     console.log('Demo markets seeding disabled');
     return;
   }
 
   try {
-    // Check if there are any existing markets
-    const existingMarketsCount = await prisma.market.count();
-    const shouldSeedDemo = existingMarketsCount === 0;
-
-    if (shouldSeedDemo) {
-      console.log('Seeding demo markets...');
-      await prisma.market.createMany({
-        data: demoMarkets,
-      });
-      console.log(`Successfully seeded ${demoMarkets.length} demo markets`);
-    } else {
+    const snapshot = await marketsRef.limit(1).get();
+    if (!snapshot.empty) {
       console.log('Skipping demo markets seeding - existing markets found');
+      return;
     }
+
+    console.log('Seeding demo markets...');
+    const batch = db.batch();
+    for (const market of demoMarkets) {
+      batch.set(marketsRef.doc(market.id), market);
+    }
+    await batch.commit();
+    console.log(`Successfully seeded ${demoMarkets.length} demo markets`);
   } catch (error) {
     console.error('Error seeding demo markets:', error);
   }
-}
-
-// Call the seed function directly if this file is run directly
-if (require.main === module) {
-  seedDemoMarkets()
-    .catch((error) => {
-      console.error('Error seeding demo markets:', error);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
 }
